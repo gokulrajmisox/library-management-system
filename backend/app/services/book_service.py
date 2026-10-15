@@ -338,3 +338,37 @@ def add_relation(db: Session, a: int, b: int, weight: int = 1, reason: str = "re
         db.add(BookRelation(book_a_id=lo, book_b_id=hi, weight=weight, reason=reason))
     else:
         exists.weight = max(exists.weight, weight)
+
+
+def get_book_borrowers(db: Session, book_id: int):
+    """Retrieve members who currently have this book issued."""
+    from app.models.orm import Member, utcnow
+    from app.models.schemas import BookBorrower
+
+    get_book(db, book_id)
+    now = utcnow()
+    rows = db.execute(
+        select(Issue, Member)
+        .join(Member, Issue.member_id == Member.id)
+        .where(Issue.book_id == book_id, Issue.status == "active")
+        .order_by(Issue.issued_at.desc())
+    ).all()
+
+    borrowers: list[BookBorrower] = []
+    for issue, member in rows:
+        borrowers.append(
+            BookBorrower(
+                member_id=member.id,
+                member_code=member.member_code,
+                name=member.name,
+                email=member.email,
+                phone=member.phone,
+                issue_id=issue.id,
+                issued_at=issue.issued_at,
+                due_at=issue.due_at,
+                overdue=issue.due_at < now,
+                status=issue.status,
+            )
+        )
+    return borrowers
+

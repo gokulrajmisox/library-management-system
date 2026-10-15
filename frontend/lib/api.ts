@@ -126,7 +126,22 @@ export const api = {
     return handleResponse<import('@/types').Book[]>(res);
   },
 
+  getBookBorrowers: async (id: number) => {
+    const res = await fetch(`${API_BASE}/books/${id}/borrowers`);
+    return handleResponse<import('@/types').BookBorrower[]>(res);
+  },
+
   // Members
+  importMembersCsv: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/members/import-csv`, {
+      method: 'POST',
+      body: formData,
+    });
+    return handleResponse<import('@/types').CsvImportResult>(res);
+  },
+
   getMembers: async (params?: { page?: number; page_size?: number; q?: string }) => {
     const searchParams = new URLSearchParams();
     if (params) {

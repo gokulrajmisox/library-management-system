@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   Search,
@@ -14,9 +14,14 @@ import {
   Clock,
   ArrowRight,
   Sparkles,
+  UploadCloud,
+  FileSpreadsheet,
+  AlertCircle,
+  Download,
+  Check,
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { Member, Issue } from '@/types';
+import { Member, Issue, CsvImportResult } from '@/types';
 
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -35,6 +40,14 @@ export default function MembersPage() {
   const [newEmail, setNewEmail] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+
+  // CSV Import Modal
+  const [isCsvOpen, setIsCsvOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvLoading, setCsvLoading] = useState(false);
+  const [csvResult, setCsvResult] = useState<CsvImportResult | null>(null);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMembers = async () => {
     try {
@@ -83,6 +96,49 @@ export default function MembersPage() {
     }
   };
 
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCsvFile(file);
+      setCsvResult(null);
+      setCsvError(null);
+    }
+  };
+
+  const handleCsvUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvFile) return;
+
+    setCsvLoading(true);
+    setCsvError(null);
+    try {
+      const res = await api.importMembersCsv(csvFile);
+      setCsvResult(res);
+      fetchMembers();
+    } catch (err: any) {
+      setCsvError(err.message || 'Failed to import CSV file');
+    } finally {
+      setCsvLoading(false);
+    }
+  };
+
+  const downloadSampleCsv = () => {
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      encodeURIComponent(
+        'name,email,phone\n' +
+        'Gokul Raj,gokul@example.com,9876543210\n' +
+        'Ananya Sharma,ananya@example.com,9876543211\n' +
+        'Rohan Verma,rohan@example.com,9876543212\n'
+      );
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    link.setAttribute('download', 'sample_members_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-300">
       {/* Header Bar */}
@@ -95,17 +151,32 @@ export default function MembersPage() {
             Library Members
           </h1>
           <p className="mt-2 text-sm text-[var(--text-secondary)]">
-            Manage patrons, issue quotas, borrowing logs, and active reservations.
+            Manage patrons, bulk registration via CSV, issue quotas, and active borrowing records.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/25 transition-all shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Register New Member</span>
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => {
+              setCsvFile(null);
+              setCsvResult(null);
+              setCsvError(null);
+              setIsCsvOpen(true);
+            }}
+            className="px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-secondary)] text-xs font-bold text-[var(--text-primary)] flex items-center gap-2 shadow-sm transition-all"
+          >
+            <UploadCloud className="w-4 h-4 text-emerald-500" />
+            <span>Upload CSV Registrations</span>
+          </button>
+
+          <button
+            onClick={() => setIsAddOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-blue-500/25 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Register New Member</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Input Toolbar */}
@@ -120,7 +191,7 @@ export default function MembersPage() {
         />
       </div>
 
-      {/* Members Grid / Table */}
+      {/* Members Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {members.map((member) => (
           <div
@@ -337,6 +408,215 @@ export default function MembersPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* CSV Bulk Registration Modal */}
+      {isCsvOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+          <div className="w-full max-w-xl bg-[var(--surface)] border border-[var(--border)] rounded-3xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-[var(--text-primary)]">
+                    Bulk Member Registration via CSV
+                  </h3>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    Upload a .csv file to batch register new patrons into the system.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCsvOpen(false)}
+                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-[var(--surface-secondary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                Close
+              </button>
+            </div>
+
+            {csvError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{csvError}</span>
+              </div>
+            )}
+
+            {!csvResult ? (
+              <form onSubmit={handleCsvUpload} className="space-y-4">
+                {/* File Dropzone */}
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                    csvFile
+                      ? 'border-emerald-500/50 bg-emerald-500/5'
+                      : 'border-[var(--border)] hover:border-blue-500/50 hover:bg-[var(--surface-secondary)]'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={handleCsvFileChange}
+                  />
+                  <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-500 mx-auto flex items-center justify-center mb-3">
+                    <UploadCloud className="w-6 h-6" />
+                  </div>
+                  {csvFile ? (
+                    <div>
+                      <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                        {csvFile.name}
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] mt-1">
+                        {(csvFile.size / 1024).toFixed(1)} KB · Click to choose a different file
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm font-bold text-[var(--text-primary)]">
+                        Click or drag & drop a CSV file here
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] mt-1">
+                        Supported format: .csv with columns <code>name, email, phone</code>
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Sample format hint & download */}
+                <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border)] flex items-center justify-between text-xs">
+                  <div>
+                    <span className="font-semibold text-[var(--text-primary)]">Need a template?</span>
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      Headers supported: <code>name</code>, <code>email</code>, <code>phone</code>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={downloadSampleCsv}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Template</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCsvOpen(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface-secondary)]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!csvFile || csvLoading}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
+                  >
+                    {csvLoading ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Processing CSV...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-4 h-4" />
+                        <span>Process & Register Members</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Import Result View */
+              <div className="space-y-4">
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                      Import Process Completed
+                    </h4>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                      Processed {csvResult.total_rows} row(s) from CSV.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border)]">
+                    <span className="text-2xl font-black text-emerald-500">
+                      {csvResult.registered}
+                    </span>
+                    <p className="text-xs font-medium text-[var(--text-secondary)]">
+                      New Members Registered
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-[var(--surface-secondary)] border border-[var(--border)]">
+                    <span className="text-2xl font-black text-amber-500">
+                      {csvResult.skipped}
+                    </span>
+                    <p className="text-xs font-medium text-[var(--text-secondary)]">
+                      Skipped / Duplicates
+                    </p>
+                  </div>
+                </div>
+
+                {csvResult.members.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-[var(--text-primary)] mb-2">
+                      Recently Registered Members:
+                    </p>
+                    <div className="max-h-36 overflow-y-auto space-y-1.5 border border-[var(--border)] rounded-xl p-2 bg-[var(--surface-secondary)]">
+                      {csvResult.members.map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between text-xs px-2 py-1 bg-[var(--surface)] rounded-lg"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[11px] text-blue-500 font-bold">
+                              {m.member_code}
+                            </span>
+                            <span className="font-medium text-[var(--text-primary)]">{m.name}</span>
+                          </div>
+                          <span className="text-[11px] text-[var(--text-secondary)]">{m.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {csvResult.errors && csvResult.errors.length > 0 && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-600 dark:text-amber-400 space-y-1">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5" /> Notice during import:
+                    </p>
+                    <ul className="list-disc pl-5 space-y-0.5 text-[11px]">
+                      {csvResult.errors.map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => {
+                      setIsCsvOpen(false);
+                      setCsvResult(null);
+                      setCsvFile(null);
+                    }}
+                    className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md"
+                  >
+                    Done & View Members
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

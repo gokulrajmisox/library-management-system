@@ -194,6 +194,27 @@ class MemberOut(BaseModel):
     waiting_count: int = 0
 
 
+class CsvImportResult(BaseModel):
+    total_rows: int
+    registered: int
+    skipped: int
+    errors: list[str]
+    members: list[MemberOut]
+
+
+class BookBorrower(BaseModel):
+    member_id: int
+    member_code: str
+    name: str
+    email: str
+    phone: str
+    issue_id: int
+    issued_at: UTCDateTime
+    due_at: UTCDateTime
+    overdue: bool
+    status: str
+
+
 # -------------------------------------------------------------------- issues
 class BookMini(BaseModel):
     model_config = ConfigDict(from_attributes=True)

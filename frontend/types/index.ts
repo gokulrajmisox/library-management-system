@@ -115,6 +115,27 @@ export interface Member {
   waiting_count: number;
 }
 
+export interface CsvImportResult {
+  total_rows: number;
+  registered: number;
+  skipped: number;
+  errors: string[];
+  members: Member[];
+}
+
+export interface BookBorrower {
+  member_id: number;
+  member_code: string;
+  name: string;
+  email: string;
+  phone: string;
+  issue_id: number;
+  issued_at: string;
+  due_at: string;
+  overdue: boolean;
+  status: string;
+}
+
 export interface Issue {
   id: number;
   book: {

@@ -30,6 +30,7 @@ export default function BooksPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [modalTab, setModalTab] = useState<'details' | 'borrowers'>('details');
 
   // Sorting animation states
   const [isSorting, setIsSorting] = useState(false);
@@ -284,7 +285,10 @@ export default function BooksPage() {
                 layout: { type: 'spring', damping: 25, stiffness: 300 },
                 scale: { duration: 0.2 },
               }}
-              onClick={() => setSelectedBook(book)}
+              onClick={() => {
+                setSelectedBook(book);
+                setModalTab('details');
+              }}
               className="group cursor-pointer flex flex-col items-center text-center p-3 rounded-2xl bg-[var(--surface)] border border-[var(--border)] hover:border-blue-500/40 hover:shadow-2xl transition-all"
             >
               {/* Photorealistic 3D cover */}
@@ -316,8 +320,21 @@ export default function BooksPage() {
 
               {/* Year & ISBN */}
               <div className="mt-2 pt-2 w-full border-t border-[var(--border)] flex items-center justify-between text-[10px] text-[var(--text-secondary)]">
-                <span>{book.publication_year}</span>
-                <span className="font-mono">{book.isbn.slice(-4)}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedBook(book);
+                    setModalTab('borrowers');
+                  }}
+                  className="font-semibold text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 hover:underline cursor-pointer"
+                  title="Click to view which members have this book"
+                >
+                  {book.total_copies - book.available_copies > 0
+                    ? `${book.total_copies - book.available_copies} on loan`
+                    : 'All in library'}
+                </button>
+                <span className="font-mono text-[9px]">#{book.isbn.slice(-4)}</span>
               </div>
             </motion.div>
           ))}
@@ -329,6 +346,7 @@ export default function BooksPage() {
         {selectedBook && (
           <BookDetailsModal
             book={selectedBook}
+            initialTab={modalTab}
             onClose={() => setSelectedBook(null)}
             onRefresh={fetchBooks}
           />

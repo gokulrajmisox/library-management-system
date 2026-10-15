@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,6 +10,7 @@ from app.database.session import get_db
 from app.models import WaitingListEntry
 from app.models.schemas import (
     ActivityOut,
+    CsvImportResult,
     IssueCreate,
     IssueOut,
     MemberCreate,
@@ -45,6 +46,15 @@ def list_members(
 @router.post("/members", response_model=MemberOut, status_code=201, tags=["members"])
 def create_member(data: MemberCreate, db: Session = Depends(get_db)) -> MemberOut:
     return msvc.member_out(db, msvc.create_member(db, data))
+
+
+@router.post("/members/import-csv", response_model=CsvImportResult, tags=["members"])
+async def import_members_csv_route(file: UploadFile = File(...), db: Session = Depends(get_db)) -> CsvImportResult:
+    content = await file.read()
+    text = content.decode("utf-8", errors="replace")
+    result = msvc.import_members_csv(db, text)
+    return CsvImportResult(**result)
+
 
 
 @router.get("/members/{member_id}", tags=["members"])

@@ -16,21 +16,24 @@ import {
   AlertCircle,
   Hash,
 } from 'lucide-react';
-import { Book, Member } from '@/types';
+import { Book, Member, BookBorrower } from '@/types';
 import BookCover from '@/components/BookCover';
 import { api } from '@/lib/api';
 
 interface BookModalProps {
   book: Book;
+  initialTab?: 'details' | 'borrowers' | 'issue' | 'waitlist' | 'related';
   onClose: () => void;
   onRefresh: () => void;
 }
 
-export default function BookDetailsModal({ book, onClose, onRefresh }: BookModalProps) {
-  const [activeTab, setActiveTab] = useState<'details' | 'issue' | 'waitlist' | 'related'>('details');
+export default function BookDetailsModal({ book, initialTab = 'details', onClose, onRefresh }: BookModalProps) {
+  const [activeTab, setActiveTab] = useState<'details' | 'borrowers' | 'issue' | 'waitlist' | 'related'>(initialTab);
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const [relatedBooks, setRelatedBooks] = useState<Book[]>([]);
+  const [borrowers, setBorrowers] = useState<BookBorrower[]>([]);
+  const [loadingBorrowers, setLoadingBorrowers] = useState(false);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -39,6 +42,12 @@ export default function BookDetailsModal({ book, onClose, onRefresh }: BookModal
     api.getMembers({ page_size: 50 }).then((res) => setMembers(res.items)).catch(console.error);
     // Load related books via graph BFS
     api.getRelatedBooks(book.id, 4).then(setRelatedBooks).catch(console.error);
+    // Load current borrowers who have this book
+    setLoadingBorrowers(true);
+    api.getBookBorrowers(book.id)
+      .then(setBorrowers)
+      .catch(console.error)
+      .finally(() => setLoadingBorrowers(false));
   }, [book.id]);
 
   const handleIssue = async () => {
@@ -147,9 +156,10 @@ export default function BookDetailsModal({ book, onClose, onRefresh }: BookModal
               </p>
 
               {/* Navigation Tabs */}
-              <div className="flex gap-2 border-b border-[var(--border)] my-5">
+              <div className="flex flex-wrap gap-2 border-b border-[var(--border)] my-5">
                 {[
                   { id: 'details', label: 'Overview' },
+                  { id: 'borrowers', label: `Borrowers (${borrowers.length})` },
                   { id: 'issue', label: 'Issue Copy' },
                   { id: 'waitlist', label: 'Join Queue' },
                   { id: 'related', label: 'Related Books' },
@@ -207,6 +217,66 @@ export default function BookDetailsModal({ book, onClose, onRefresh }: BookModal
                       • Issue operations backed by an <strong>Undo Stack (LIFO)</strong>.
                     </p>
                   </div>
+                </div>
+              )}
+
+              {/* Tab: Current Borrowers */}
+              {activeTab === 'borrowers' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-[var(--text-primary)]">
+                      Members Who Currently Have This Book
+                    </span>
+                    <span className="text-[var(--text-secondary)]">
+                      {book.total_copies - book.available_copies} of {book.total_copies} Copies Checked Out
+                    </span>
+                  </div>
+
+                  {loadingBorrowers ? (
+                    <p className="text-xs text-[var(--text-secondary)] italic py-4">Loading active borrowers...</p>
+                  ) : borrowers.length === 0 ? (
+                    <div className="p-6 rounded-2xl bg-[var(--surface-secondary)] text-center text-xs text-[var(--text-secondary)] space-y-1">
+                      <p className="font-semibold text-[var(--text-primary)]">All copies are in the library</p>
+                      <p>No members currently have this book issued.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {borrowers.map((borrower) => (
+                        <div
+                          key={borrower.issue_id}
+                          className="p-3 bg-[var(--surface-secondary)] rounded-xl border border-[var(--border)] flex items-center justify-between gap-3 text-xs"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-500 font-bold text-xs flex items-center justify-center shrink-0">
+                              {borrower.name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-[var(--text-primary)] truncate">
+                                {borrower.name}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] font-mono truncate">
+                                ID: {borrower.member_code} · {borrower.email}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                borrower.overdue
+                                  ? 'bg-rose-500/10 text-rose-500'
+                                  : 'bg-emerald-500/10 text-emerald-500'
+                              }`}
+                            >
+                              {borrower.overdue ? 'Overdue' : 'On Loan'}
+                            </span>
+                            <span className="block text-[10px] text-[var(--text-secondary)] mt-0.5">
+                              Due: {new Date(borrower.due_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

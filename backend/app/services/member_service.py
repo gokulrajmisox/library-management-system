@@ -125,7 +125,95 @@ def delete_member(db: Session, member_id: int) -> None:
         for q in engine.waiting.values():
             while q.remove_where(lambda x: x.member_id == member_id) is not None:
                 pass
-    name = m.name
     db.delete(m)
     db.commit()
     engine.log("member", "Member account removed", name)
+
+
+def import_members_csv(db: Session, file_content: str) -> dict[str, Any]:
+    """Parse CSV text with headers (name, email, phone) and register new members."""
+    import csv
+    import io
+    from app.models.schemas import CsvImportResult
+
+    f = io.StringIO(file_content)
+    reader = csv.reader(f)
+    
+    rows = list(reader)
+    if not rows:
+        return {"total_rows": 0, "registered": 0, "skipped": 0, "errors": ["CSV file is empty."], "members": []}
+    
+    header = [h.strip().lower() for h in rows[0]]
+    # Map header columns
+    name_idx, email_idx, phone_idx = -1, -1, -1
+    for idx, col in enumerate(header):
+        if "name" in col:
+            name_idx = idx
+        elif "email" in col or "mail" in col:
+            email_idx = idx
+        elif "phone" in col or "contact" in col or "mobile" in col:
+            phone_idx = idx
+            
+    # Default fallbacks if header doesn't match standard names
+    if name_idx == -1 and len(header) >= 1:
+        name_idx = 0
+    if email_idx == -1 and len(header) >= 2:
+        email_idx = 1
+    if phone_idx == -1 and len(header) >= 3:
+        phone_idx = 2
+        
+    start_row = 1 if (any("name" in h or "email" in h for h in header)) else 0
+    
+    registered_members: list[Member] = []
+    skipped = 0
+    errors: list[str] = []
+    data_rows = rows[start_row:]
+    
+    for row_num, row in enumerate(data_rows, start=start_row + 1):
+        if not row or all(not cell.strip() for cell in row):
+            continue
+        try:
+            name = row[name_idx].strip() if name_idx < len(row) else ""
+            email = row[email_idx].strip().lower() if email_idx < len(row) else ""
+            phone = row[phone_idx].strip() if phone_idx < len(row) else ""
+            
+            if not name:
+                errors.append(f"Row {row_num}: Name is required.")
+                skipped += 1
+                continue
+            if not email or "@" not in email:
+                errors.append(f"Row {row_num}: Invalid email '{email}'.")
+                skipped += 1
+                continue
+                
+            # Check duplicate email
+            exists = db.execute(select(Member.id).where(func.lower(Member.email) == email)).first()
+            if exists:
+                errors.append(f"Row {row_num}: Email '{email}' is already registered (skipped).")
+                skipped += 1
+                continue
+                
+            member = Member(
+                member_code=_next_code(db),
+                name=name,
+                email=email,
+                phone=phone,
+            )
+            db.add(member)
+            db.commit()
+            db.refresh(member)
+            registered_members.append(member)
+            engine.log("member", f"Imported member: {member.name}", member.name)
+        except Exception as ex:
+            db.rollback()
+            errors.append(f"Row {row_num}: {str(ex)}")
+            skipped += 1
+
+    return {
+        "total_rows": len(data_rows),
+        "registered": len(registered_members),
+        "skipped": skipped,
+        "errors": errors,
+        "members": [member_out(db, m) for m in registered_members],
+    }
+

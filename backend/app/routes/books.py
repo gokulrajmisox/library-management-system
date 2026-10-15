@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models import Book, Category
 from app.models.schemas import (
+    BookBorrower,
     BookCreate,
     BookOut,
     BookUpdate,
@@ -78,6 +79,11 @@ def by_title(title: str, db: Session = Depends(get_db)) -> BSTSearchResponse:
 @router.get("/books/{book_id}", response_model=BookOut)
 def get_book(book_id: int, db: Session = Depends(get_db)) -> BookOut:
     return svc.to_book_out(svc.get_book(db, book_id))
+
+
+@router.get("/books/{book_id}/borrowers", response_model=list[BookBorrower])
+def get_book_borrowers(book_id: int, db: Session = Depends(get_db)) -> list[BookBorrower]:
+    return svc.get_book_borrowers(db, book_id)
 
 
 @router.get("/books/{book_id}/related", response_model=list[BookOut])
